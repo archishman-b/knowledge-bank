@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Understanding Large Language Models — A Deep Dive</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Source+Sans+3:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --page: #faf8f4;
+  --ink: #1c1a17;
+  --muted: #6b6459;
+  --rule: #ddd8ce;
+  --accent: #b5401c;
+  --accent-light: #f9ece8;
+  --blue: #2460a7;
+  --blue-light: #e8f0fa;
+  --gold: #c18a1a;
+  --gold-light: #fdf6e3;
+  --green: #2d7a4f;
+  --green-light: #eaf5ef;
+  --sidebar-w: 220px;
+  --body-max: 680px;
+  --full-max: 1100px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Lora', Georgia, serif;
+  background: var(--page);
+  color: var(--ink);
+  line-height: 1.8;
+  font-size: 17px;
+}
+
+#reading-progress {
+  position: fixed; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--rule); z-index: 999;
+}
+#reading-progress-bar {
+  height: 100%; width: 0; background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+#sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--ink);
+  color: #c8bfaf;
+  overflow-y: auto;
+  z-index: 100;
+  display: flex; flex-direction: column;
+  border-right: 1px solid #333;
+}
+
+#sidebar-top {
+  padding: 28px 20px 20px;
+  border-bottom: 1px solid #2e2b25;
+}
+
+#sidebar-top .label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--gold); display: block; margin-bottom: 8px;
+}
+
+#sidebar-top h2 {
+  font-family: 'Lora', serif;
+  font-size: 13px; line-height: 1.4; color: #f0ebe0; font-weight: 600;
+}
+
+#sidebar-top .author {
+  font-size: 11px; color: #7a6f5e; margin-top: 5px; font-style: italic;
+}
+
+#toc { padding: 14px 0; flex: 1; }
+
+.toc-section {
+  padding: 6px 20px 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px; letter-spacing: 2.5px; text-transform: uppercase;
+  color: #4a4438; margin-top: 8px;
+}
+
+.toc-link {
+  display: block; padding: 7px 20px;
+  font-size: 11.5px; color: #9a8f7e; text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: all 0.15s; line-height: 1.4;
+  font-family: 'Source Sans 3', sans-serif;
+}
+.toc-link:hover { color: #f0ebe0; background: rgba(255,255,255,0.04); }
+.toc-link.active { color: #f0ebe0; border-left-color: var(--accent); background: rgba(181,64,28,0.1); }
+.toc-link .ch-num { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #5a5040; display: block; margin-bottom: 1px; }
+
+#main { margin-left: var(--sidebar-w); min-height: 100vh; }
+
+#cover {
+  background: var(--ink); color: #f0ebe0;
+  padding: 80px 100px 72px;
+  position: relative; overflow: hidden;
+}
+#cover::before {
+  content: '';
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.025) 39px, rgba(255,255,255,0.025) 40px);
+  pointer-events: none;
+}
+#cover .cover-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 4px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 24px; display: block;
+}
+#cover h1 {
+  font-family: 'Lora', serif;
+  font-size: 44px; font-weight: 700; line-height: 1.15;
+  max-width: 700px; margin-bottom: 20px;
+}
+#cover .subtitle {
+  font-size: 18px; color: #a09080; font-style: italic;
+  max-width: 560px; line-height: 1.5; margin-bottom: 32px;
+}
+#cover .meta {
+  display: flex; gap: 36px;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13px; color: #6a5f4e;
+  border-top: 1px solid #2e2b25; padding-top: 24px;
+}
+#cover .meta span strong { color: #9a8f7e; display: block; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 3px; }
+
+.chapter {
+  padding: 64px 80px 72px;
+  border-bottom: 1px solid var(--rule);
+  max-width: var(--full-max);
+  position: relative;
+}
+.chapter:nth-child(even) { background: #f6f3ee; }
+
+.chapter-header {
+  margin-bottom: 40px; padding-bottom: 28px;
+  border-bottom: 1px solid var(--rule);
+}
+.ch-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--accent); display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+}
+.ch-label::after { content: ''; flex: 1; max-width: 60px; height: 1px; background: var(--rule); }
+
+.chapter-header h2 {
+  font-family: 'Lora', serif;
+  font-size: 30px; font-weight: 700; line-height: 1.2; margin-bottom: 10px;
+}
+.chapter-header .ch-sub { font-size: 16px; color: var(--muted); font-style: italic; }
+
+.prose { max-width: var(--body-max); }
+.prose p { margin-bottom: 1.4em; }
+.prose h3 {
+  font-family: 'Lora', serif;
+  font-size: 20px; font-weight: 700;
+  margin: 2em 0 0.7em;
+  padding-top: 1em; border-top: 1px solid var(--rule);
+}
+.prose h4 {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--muted); margin: 1.8em 0 0.5em;
+}
+
+.chapter-body {
+  display: grid;
+  grid-template-columns: var(--body-max) 1fr;
+  gap: 0 48px;
+  align-items: start;
+}
+
+.margin-col { padding-top: 4px; }
+
+.margin-note {
+  background: var(--gold-light);
+  border-left: 3px solid var(--gold);
+  border-radius: 3px;
+  padding: 12px 14px;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 12.5px; line-height: 1.6; color: #5a4a20;
+  margin-bottom: 20px;
+  position: sticky; top: 32px;
+}
+.margin-note .note-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--gold); display: block; margin-bottom: 5px;
+}
+.margin-note.blue { background: var(--blue-light); border-left-color: var(--blue); color: #1a3a60; }
+.margin-note.blue .note-label { color: var(--blue); }
+.margin-note.green { background: var(--green-light); border-left-color: var(--green); color: #1a4030; }
+.margin-note.green .note-label { color: var(--green); }
+
+.callout {
+  border-radius: 6px; padding: 20px 24px;
+  margin: 1.8em 0;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 15px; line-height: 1.65;
+}
+.callout-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase;
+  display: block; margin-bottom: 8px; font-weight: 500;
+}
+.callout.key-idea { background: var(--accent-light); border: 1px solid #e8b0a0; color: #5a1e10; }
+.callout.key-idea .callout-label { color: var(--accent); }
+.callout.analogy { background: var(--blue-light); border: 1px solid #b0cce8; color: #1a3060; }
+.callout.analogy .callout-label { color: var(--blue); }
+.callout.warning { background: var(--gold-light); border: 1px solid #e8c870; color: #4a3a10; }
+.callout.warning .callout-label { color: var(--gold); }
+.callout.definition { background: var(--green-light); border: 1px solid #9ad4b0; color: #1a4030; }
+.callout.definition .callout-label { color: var(--green); }
+
+.pull-quote {
+  border-left: 4px solid var(--accent);
+  margin: 2em 0; padding: 4px 0 4px 28px;
+}
+.pull-quote p {
+  font-size: 21px; font-style: italic; line-height: 1.5;
+  color: var(--ink); margin-bottom: 8px !important;
+}
+.pull-quote cite {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 12px; color: var(--muted); font-style: normal; letter-spacing: 0.5px;
+}
+
+.term {
+  border-bottom: 1.5px dashed var(--blue);
+  cursor: help; color: var(--blue); position: relative;
+}
+.term:hover .tooltip { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+.tooltip {
+  position: absolute; bottom: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--ink); color: #e8dfc8;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13px; line-height: 1.5;
+  padding: 10px 14px; border-radius: 5px; width: 240px;
+  opacity: 0; pointer-events: none;
+  transition: all 0.18s ease; z-index: 500;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.tooltip::after {
+  content: ''; position: absolute; top: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: var(--ink);
+}
+
+.figure {
+  background: white; border: 1px solid var(--rule);
+  border-radius: 6px; padding: 24px 28px; margin: 2em 0;
+}
+.figure-caption {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13px; color: var(--muted); line-height: 1.5;
+  border-top: 1px solid var(--rule); padding-top: 12px; margin-top: 14px;
+}
+.figure-caption strong { color: var(--ink); }
+
+.pipeline {
+  display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+  font-family: 'Source Sans 3', sans-serif;
+}
+.pipe-step {
+  background: var(--ink); color: #f0ebe0;
+  padding: 10px 16px; font-size: 12px; font-weight: 600;
+  border-radius: 4px; text-align: center; min-width: 100px;
+}
+.pipe-step .step-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; color: var(--gold); display: block; margin-bottom: 3px;
+}
+.pipe-arrow { color: var(--muted); font-size: 18px; padding: 0 6px; flex-shrink: 0; }
+.pipe-step.highlight { background: var(--accent); }
+.pipe-step.dim { background: #3a3530; }
+
+.terms-box {
+  background: var(--ink); color: #c8bfaf;
+  border-radius: 6px; padding: 18px 20px; margin-bottom: 20px;
+}
+.terms-box .box-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px; letter-spacing: 2.5px; text-transform: uppercase;
+  color: var(--gold); display: block; margin-bottom: 12px;
+}
+.term-item {
+  margin-bottom: 10px; padding-bottom: 10px;
+  border-bottom: 1px solid #2e2b25;
+  font-size: 13px; line-height: 1.5;
+}
+.term-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.term-item strong { color: #f0ebe0; font-family: 'Source Sans 3', sans-serif; }
+
+.compare-table {
+  width: 100%; border-collapse: collapse;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px; margin: 1.5em 0;
+}
+.compare-table th {
+  background: var(--ink); color: #f0ebe0;
+  padding: 10px 14px; text-align: left;
+  font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+}
+.compare-table td {
+  padding: 10px 14px; border-bottom: 1px solid var(--rule);
+  vertical-align: top; line-height: 1.5;
+}
+.compare-table tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
+
+.numbered-list { list-style: none; counter-reset: item; margin: 1em 0; }
+.numbered-list li {
+  counter-increment: item; display: flex; gap: 14px;
+  margin-bottom: 12px; font-size: 16px; line-height: 1.6;
+}
+.numbered-list li::before {
+  content: counter(item);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 500;
+  background: var(--accent); color: white;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 3px;
+}
+
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; background: #ede8de;
+  padding: 1px 5px; border-radius: 3px; color: #5a1e10;
+}
+
+.summary-box {
+  background: var(--ink); color: #c8bfaf;
+  border-radius: 8px; padding: 28px 32px; margin-top: 40px;
+  font-family: 'Source Sans 3', sans-serif;
+}
+.summary-box .sum-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--gold); display: block; margin-bottom: 14px;
+}
+.summary-box ul { list-style: none; }
+.summary-box li {
+  padding: 7px 0; border-bottom: 1px solid #2e2b25;
+  font-size: 14px; line-height: 1.5;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.summary-box li:last-child { border-bottom: none; }
+.summary-box li::before { content: '›'; color: var(--accent); flex-shrink: 0; font-size: 16px; }
+
+#doc-footer {
+  padding: 48px 80px; border-top: 1px solid var(--rule); max-width: var(--full-max);
+}
+#doc-footer .footer-inner {
+  max-width: var(--body-max);
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13px; color: var(--muted); line-height: 1.6;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="reading-progress"><div id="reading-progress-bar"></div></div>
+
+<nav id="sidebar">
+  <div id="sidebar-top">
+    <span class="label">Reading View</span>
+    <h2>Deep Dive into Large Language Models</h2>
+    <p class="author">Based on Andrej Karpathy's lecture</p>
+  </div>
+  <div id="toc">
+    <div class="toc-section">Contents</div>
+    <a href="#cover" class="toc-link active"><span class="ch-num">COVER</span>Title Page</a>
+    <a href="#ch1" class="toc-link"><span class="ch-num">§ 1</span>Introduction</a>
+    <a href="#ch2" class="toc-link"><span class="ch-num">§ 2</span>Pre-Training Data</a>
+    <a href="#ch3" class="toc-link"><span class="ch-num">§ 3</span>Tokenization</a>
+    <a href="#ch4" class="toc-link"><span class="ch-num">§ 4</span>Neural Networks</a>
+    <a href="#ch5" class="toc-link"><span class="ch-num">§ 5</span>The Base Model</a>
+    <a href="#ch6" class="toc-link"><span class="ch-num">§ 6</span>Supervised Fine-Tuning</a>
+    <a href="#ch7" class="toc-link"><span class="ch-num">§ 7</span>Hallucinations</a>
+    <a href="#ch8" class="toc-link"><span class="ch-num">§ 8</span>Context Windows</a>
+    <a href="#ch9" class="toc-link"><span class="ch-num">§ 9</span>Tools &amp; Reasoning</a>
+    <a href="#ch10" class="toc-link"><span class="ch-num">§ 10</span>Thinking Models</a>
+    <a href="#ch11" class="toc-link"><span class="ch-num">§ 11</span>RLHF &amp; Alignment</a>
+    <a href="#ch12" class="toc-link"><span class="ch-num">§ 12</span>Practical Guidance</a>
+  </div>
+</nav>
+
+<div id="main">
+
+<div id="cover">
+  <span class="cover-label">Lecture Notes — General Audience Edition</span>
+  <h1>Understanding Large Language Models</h1>
+  <p class="subtitle">A comprehensive, accessible account of how systems like ChatGPT are built, trained, and used — and the mental models needed to work with them effectively.</p>
+  <div class="meta">
+    <div><span><strong>Source</strong></span>Andrej Karpathy — Deep Dive into LLMs</div>
+    <div><span><strong>Format</strong></span>12 Chapters</div>
+    <div><span><strong>Level</strong></span>General Audience</div>
+  </div>
+</div>
+
+<!-- § 1 -->
+<section class="chapter" id="ch1">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 1</div>
+    <h2>Introduction: What Is Behind the Text Box?</h2>
+    <p class="ch-sub">Setting out the questions this text will answer</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>When you navigate to a service like ChatGPT and type a message into that familiar text box, you are interacting with one of the most complex artifacts ever constructed by human engineering. And yet, for most users, the experience is deceptively simple: you write something, you press Enter, and words come back.</p>
+      <div class="pull-quote">
+        <p>"What is behind this text box? What should we be putting in there, and what are these words generated back? How does this work — and what, exactly, are you talking to?"</p>
+        <cite>— Andrej Karpathy</cite>
+      </div>
+      <p>This question motivates everything that follows. The goal is to give you robust <strong>mental models</strong> for thinking about large language models: what they are capable of, where they reliably fail, and what sharp edges to be aware of in practice.</p>
+      <h3>The Three-Stage Pipeline</h3>
+      <p>Building a system like ChatGPT involves three major sequential stages. Understanding these stages is foundational — each one imprints a different character on the final model.</p>
+      <div class="figure">
+        <div class="pipeline">
+          <div class="pipe-step highlight"><span class="step-num">STAGE 1</span>Pre-Training</div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-step"><span class="step-num">STAGE 2</span>Fine-Tuning</div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-step"><span class="step-num">STAGE 3</span>RLHF / RL</div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-step dim"><span class="step-num">RESULT</span>Assistant</div>
+        </div>
+        <div class="figure-caption"><strong>Figure 1.1</strong> The three-stage pipeline from raw internet text to a deployed conversational assistant.</div>
+      </div>
+      <p>The first stage — <strong>pre-training</strong> — is about knowledge acquisition. The second — <strong>supervised fine-tuning</strong> — teaches helpful conversational behavior. The third — <strong>RLHF</strong> — further aligns the model with human preferences.</p>
+      <div class="callout key-idea">
+        <span class="callout-label">Key Idea</span>
+        These tools are simultaneously magical and fallible. They are extraordinarily capable in some dimensions while failing at surprising, seemingly trivial tasks. This text explains both sides — and why they are two faces of the same coin.
+      </div>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note">
+        <span class="note-label">Scope</span>
+        Mathematical derivations are intentionally omitted. The goal is intuition and mental models, not formalism.
+      </div>
+      <div class="terms-box">
+        <span class="box-label">Key Terms</span>
+        <div class="term-item"><strong>LLM</strong> — Large Language Model; a neural network trained on text at scale.</div>
+        <div class="term-item"><strong>ChatGPT</strong> — OpenAI's consumer interface, built on GPT-class LLMs.</div>
+        <div class="term-item"><strong>Pipeline</strong> — The sequence of training stages producing a deployed model.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 2 -->
+<section class="chapter" id="ch2">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 2</div>
+    <h2>Pre-Training: Ingesting the Internet</h2>
+    <p class="ch-sub">How raw web text becomes a training dataset</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>The first step in pre-training is assembling a training dataset from internet text. The goal is a collection that is simultaneously <strong>large</strong>, <strong>high-quality</strong>, and <strong>diverse</strong>. Diversity matters because the model's eventual breadth of knowledge is bounded by the breadth of the data it sees.</p>
+      <p>Hugging Face's <strong>FineWeb</strong> is a publicly documented example, illustrating the multi-stage curation process that all major labs replicate internally.</p>
+      <h3>The Curation Pipeline</h3>
+      <ol class="numbered-list">
+        <li><strong>Web Crawl</strong> — A crawler downloads raw HTML from billions of web pages.</li>
+        <li><strong>HTML Processing</strong> — Boilerplate, navigation menus, and markup are stripped.</li>
+        <li><strong>Quality Filtering</strong> — Heuristics remove spam, duplicates, and low-information pages.</li>
+        <li><strong>Language Filtering</strong> — Pages are classified by language; FineWeb retains pages more than 65% English.</li>
+        <li><strong>Deduplication</strong> — Near-duplicate documents are removed to prevent over-fitting.</li>
+      </ol>
+      <div class="callout analogy">
+        <span class="callout-label">Scale in Perspective</span>
+        FineWeb's final dataset occupies roughly <strong>44 terabytes</strong> on disk — small enough to fit on a single modern hard drive, yet containing an enormous breadth of human knowledge. Aggressive filtering reduces the vast raw internet to a manageable, curated slice.
+      </div>
+      <p>The critical insight: not all data is equal. Quality filtering is as important as quantity in determining the final model's capabilities.</p>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note blue">
+        <span class="note-label">Design Choice</span>
+        The choice of which languages to include directly determines multilingual performance. A model trained mostly on English will underperform in Spanish, Mandarin, or Hindi.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 3 -->
+<section class="chapter" id="ch3">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 3</div>
+    <h2>Tokenization: From Text to Numbers</h2>
+    <p class="ch-sub">How language is encoded into a form neural networks can process</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>Neural networks operate on numbers, not characters or words. <strong>Tokenization</strong> is the process of converting raw text into numerical representations.</p>
+      <p>A <span class="term">tokenizer<span class="tooltip">An algorithm that converts text into a sequence of integer IDs, each representing a sub-word chunk. Most modern tokenizers use Byte-Pair Encoding (BPE).</span></span> breaks text into chunks called <strong>tokens</strong>. Common words become single tokens; rare words are split across multiple tokens. Each unique token is mapped to an integer ID.</p>
+      <div class="callout definition">
+        <span class="callout-label">Definition — Token</span>
+        A token is the atomic unit of text an LLM processes — typically a sub-word chunk, not a full word, not a single character. GPT-4's tokenizer contains approximately <strong>100,000</strong> distinct tokens.
+      </div>
+      <h3>Why Tokenization Causes Surprising Failures</h3>
+      <p>Because the model processes tokens rather than characters, tasks requiring character-level manipulation — spelling, counting letters, reversing words — are disproportionately difficult. The model must decompose a token back into characters, a step for which it receives little training signal.</p>
+      <div class="callout warning">
+        <span class="callout-label">Practical Implication</span>
+        For letter counting, spell-checking, or string reversal, instruct the model to use a code interpreter rather than rely on its own processing. The Python interpreter handles character-level operations exactly; the LLM does not.
+      </div>
+    </div>
+    <div class="margin-col">
+      <div class="terms-box">
+        <span class="box-label">Key Terms</span>
+        <div class="term-item"><strong>Token</strong> — A sub-word text chunk mapped to an integer ID.</div>
+        <div class="term-item"><strong>Vocabulary</strong> — The full set of tokens a tokenizer recognizes (~100K for GPT-4).</div>
+        <div class="term-item"><strong>BPE</strong> — Byte-Pair Encoding; the most common tokenization algorithm.</div>
+      </div>
+      <div class="margin-note green">
+        <span class="note-label">Try It</span>
+        Explore tokenization interactively at <em>tiktokenizer.vercel.app</em> — paste any text and watch it split into tokens in real time.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 4 -->
+<section class="chapter" id="ch4">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 4</div>
+    <h2>Neural Networks and Training</h2>
+    <p class="ch-sub">Weights, loss functions, and gradient descent</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>Once the training data is tokenized, a <span class="term">neural network<span class="tooltip">A mathematical function composed of many layers of operations parameterized by billions of learned numbers called weights or parameters.</span></span> is trained to predict, for any sequence of tokens, what token comes next.</p>
+      <p>The architecture used in modern LLMs is the <strong>Transformer</strong>, introduced in 2017. Its key property: every token in the input can directly relate to every other token via <strong>attention</strong>.</p>
+      <h3>The Training Loop</h3>
+      <ol class="numbered-list">
+        <li>Sample a window of tokens from the training data.</li>
+        <li>Pass tokens through the network; produce a probability distribution over what comes next.</li>
+        <li>Compare prediction to the actual next token; compute the <strong>loss</strong> — how wrong the prediction was.</li>
+        <li>Use <span class="term">backpropagation<span class="tooltip">An algorithm computing, for each parameter, how much a small change in that parameter changes the loss — giving the gradient, the direction of steepest descent.</span></span> to see how each weight contributed to the error.</li>
+        <li>Nudge all weights in the direction that reduces loss (<strong>gradient descent</strong>). Repeat trillions of times.</li>
+      </ol>
+      <div class="callout key-idea">
+        <span class="callout-label">Key Insight</span>
+        The model is never explicitly taught any fact. It learns everything — grammar, arithmetic, geography, code, reasoning — implicitly, by being forced to predict what text comes next across an enormous diversity of documents.
+      </div>
+      <h3>Scale</h3>
+      <p>Modern LLMs have between <strong>7 billion and 1+ trillion parameters</strong>. Training the largest models costs tens to hundreds of millions of dollars in compute — which is why only a handful of organizations can train frontier models from scratch.</p>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note">
+        <span class="note-label">The Loss Number</span>
+        During training, a gradually decreasing "loss" indicates the model is learning. A loss near zero would mean perfect prediction — impossible on natural text, as language is inherently uncertain.
+      </div>
+      <div class="margin-note blue">
+        <span class="note-label">Hardware</span>
+        An H100 GPU costs ~$30,000. Training a frontier model requires thousands of them running for months — total compute cost can exceed $100 million.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 5 -->
+<section class="chapter" id="ch5">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 5</div>
+    <h2>The Base Model</h2>
+    <p class="ch-sub">What pre-training produces — and what it does not</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>After pre-training, the result is a <strong>base model</strong> — a powerful statistical predictor of what text comes next.</p>
+      <p>Feed it the opening of a Wikipedia article, and it continues a plausible Wikipedia article. Feed it a Python function's start, and it completes plausible Python code. Feed it a dialogue, and it continues the dialogue — potentially speaking as multiple characters simultaneously.</p>
+      <div class="callout analogy">
+        <span class="callout-label">Analogy</span>
+        Karpathy describes a base model as a "<em>document sampler</em>" — it samples text statistically plausible given the internet it trained on. It has no persistent identity, no goals. It is an extraordinarily fluent simulation of text.
+      </div>
+      <h3>What the Model "Knows"</h3>
+      <p>The base model has internalized an enormous amount of world knowledge — but in a probabilistic, lossy way. Information appearing frequently in training data is better represented than rare information. The model is, in a sense, a very high-resolution statistical compression of the internet.</p>
+      <div class="callout warning">
+        <span class="callout-label">Critical Limitation</span>
+        A base model is <em>not</em> a knowledge base. It cannot look things up; it can only recall (imperfectly) what it saw during training. A base model is also <em>not yet an assistant</em> — it will not answer questions helpfully. It continues whatever pattern you provide.
+      </div>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note green">
+        <span class="note-label">Where to Try</span>
+        Hyperbolic (<em>hyperbolic.xyz</em>) serves base models including Llama 3.1 Base — a revealing experience very different from interacting with a chat assistant.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 6 -->
+<section class="chapter" id="ch6">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 6</div>
+    <h2>Supervised Fine-Tuning: Teaching Helpfulness</h2>
+    <p class="ch-sub">How a document predictor becomes a conversational assistant</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>The base model knows a great deal but does not behave like an assistant. <strong>Supervised Fine-Tuning (SFT)</strong> addresses this by training the model on human-written example conversations.</p>
+      <h3>The Data Labeling Process</h3>
+      <p>Companies hire <strong>data labelers</strong> — often domain experts — who are given detailed <em>labeling instructions</em> specifying ideal assistant behavior: tone, format, refusal policies, uncertainty acknowledgment. Their task: write ideal responses to a diverse collection of prompts. After collecting perhaps one million such pairs, this dataset is used to continue training the base model.</p>
+      <div class="callout key-idea">
+        <span class="callout-label">The Core Mental Model</span>
+        When you receive a response from ChatGPT, you are receiving a <em>neural network simulation of what a human data labeler, following OpenAI's instruction manual, would have written</em>. Not a retrieval from a database. Not a lookup. A statistical imitation of human expert writing behavior.
+      </div>
+      <h3>Before and After SFT</h3>
+      <table class="compare-table">
+        <thead><tr><th>Base Model</th><th>After SFT</th></tr></thead>
+        <tbody>
+          <tr><td>Continues documents in any style</td><td>Responds in structured, helpful format</td></tr>
+          <tr><td>No consistent identity or values</td><td>Consistent persona and refusal behavior</td></tr>
+          <tr><td>May simulate multiple characters</td><td>Maintains a single "assistant" voice</td></tr>
+          <tr><td>Does not acknowledge uncertainty</td><td>Trained to say "I'm not sure" where appropriate</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note">
+        <span class="note-label">Why SFT Is Efficient</span>
+        SFT doesn't need to re-teach facts — all world knowledge is already in the weights from pre-training. SFT only teaches format and disposition, which is why SFT datasets can be small relative to pre-training data.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 7 -->
+<section class="chapter" id="ch7">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 7</div>
+    <h2>Hallucinations and the Limits of Knowledge</h2>
+    <p class="ch-sub">Why models sometimes confabulate — and how to account for it</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p><strong>Hallucination</strong>: the generation of confident-sounding text that is factually false. The model may invent citations, attribute quotes to people who never said them, or describe events that never occurred.</p>
+      <h3>Why Hallucination Occurs</h3>
+      <p>The model was trained to produce <em>plausible continuations</em> of text — not to verify claims. When it lacks reliable information, it does not "know that it doesn't know." Instead, it interpolates from related patterns and generates something that <em>sounds</em> right.</p>
+      <div class="callout analogy">
+        <span class="callout-label">Analogy</span>
+        This resembles how human memory works under pressure. Asked to recall a barely-remembered fact, you may unconsciously construct a plausible answer that feels like a memory but is partly fabricated. The LLM does this constantly, at scale, without any sense that it is doing so.
+      </div>
+      <h3>Swiss Cheese Capabilities</h3>
+      <p>Karpathy introduces a useful metaphor: the model's capabilities are like a block of Swiss cheese. The cheese represents vast, mostly solid reliable performance. The holes — unpredictable gaps — represent areas where the model fails at apparently simple tasks.</p>
+      <p>A model that can write elegant poetry may fail to compare 9.11 vs. 9.9. A model that can explain quantum mechanics may fail to count letters in a word. The holes are an artifact of how tokenization and fixed-width computation interact with the training data.</p>
+      <div class="callout warning">
+        <span class="callout-label">Practical Rules of Thumb</span>
+        (1) Never trust LLM citations without verifying independently. (2) Use a code interpreter for arithmetic. (3) For recent facts or statistics, verify with search. (4) Treat model output as a high-quality first draft, not a final authority.
+      </div>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note">
+        <span class="note-label">Knowledge Cutoff</span>
+        Beyond hallucination, models have a cutoff: they cannot know events after their training data was collected. Questions about recent events will get stale or hallucinated answers.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 8 -->
+<section class="chapter" id="ch8">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 8</div>
+    <h2>Context Windows and Memory</h2>
+    <p class="ch-sub">The two-memory architecture of language models</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>Language models have two fundamentally different kinds of memory, operating at different timescales with different properties.</p>
+      <table class="compare-table">
+        <thead><tr><th>Memory Type</th><th>Location</th><th>Properties</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Long-term</strong></td><td>Model weights</td><td>Everything from training. Fuzzy, probabilistic, fixed after training.</td></tr>
+          <tr><td><strong>Working</strong></td><td>Context window</td><td>The live conversation. Precise and verbatim — but limited and ephemeral.</td></tr>
+        </tbody>
+      </table>
+      <p>The <span class="term">context window<span class="tooltip">The maximum number of tokens an LLM can "see" at once when generating. Modern models support 128K tokens or more. Everything outside the window is invisible.</span></span> is the buffer of tokens currently being processed — the entire conversation history, injected documents, and system instructions. If the conversation exceeds the context length, older content is silently dropped.</p>
+      <div class="callout key-idea">
+        <span class="callout-label">Practical Implication</span>
+        Information you paste into the conversation is more reliably accessible than information from training — context is exact while trained knowledge is approximate. When accuracy matters, provide the source material directly.
+      </div>
+      <h3>RAG: Bridging the Two Memories</h3>
+      <p><span class="term">Retrieval-Augmented Generation (RAG)<span class="tooltip">A technique where relevant documents are retrieved from a database and injected into the context window before the model generates a response, combining retrieval precision with generative fluency.</span></span> finds relevant documents and injects them into the context window — combining retrieval precision with generative fluency.</p>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note blue">
+        <span class="note-label">Context Length Progress</span>
+        Early GPT models: ~2,000 tokens. GPT-4 Turbo: 128,000. Gemini 1.5 Pro: 1 million. Rapid expansion of context windows is one of the defining trends in LLM development.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 9 -->
+<section class="chapter" id="ch9">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 9</div>
+    <h2>Tool Use and Augmented Reasoning</h2>
+    <p class="ch-sub">Extending LLMs by connecting them to external systems</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>A bare language model is limited by what it can compute while generating a response. But modern LLM systems can also invoke <strong>external tools</strong> — web search, code interpreters, calculators, APIs — and incorporate results into the context window.</p>
+      <p>Tool use: the model generates a structured <em>tool call</em>, the tool executes, its output is appended to the context, and the model continues generating based on the enriched context.</p>
+      <h3>What Tools Address</h3>
+      <ol class="numbered-list">
+        <li><strong>Web Search</strong> — Overcomes knowledge cutoff; provides current information; reduces reliance on hallucinated facts.</li>
+        <li><strong>Code Interpreter</strong> — Offloads precise computation to an exact executor that cannot hallucinate a mathematical result.</li>
+        <li><strong>APIs</strong> — Connects the model to live databases, calendars, email, and any digital service.</li>
+      </ol>
+      <div class="callout key-idea">
+        <span class="callout-label">Strategic Principle</span>
+        Skilled LLM use means knowing which tasks to entrust to the model's native capabilities and which to route through tools. Mathematical precision, current information, and character-level operations should almost always go through tools.
+      </div>
+      <h3>Chain-of-Thought Prompting</h3>
+      <p>Instructing the model to <strong>think step by step</strong> before answering significantly improves accuracy on multi-step reasoning tasks. It forces the model to spread hard computation across many tokens rather than trying to compute the answer in a single forward pass — giving it, in effect, more mental scratch paper.</p>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note">
+        <span class="note-label">Why Tools Help</span>
+        The model processes a fixed number of computational layers per token. Some problems require more computation than a single forward pass provides. Tools and chain-of-thought compensate for this architectural constraint.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 10 -->
+<section class="chapter" id="ch10">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 10</div>
+    <h2>Thinking Models and Reinforcement Learning</h2>
+    <p class="ch-sub">A new class of models that reason before responding</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>A distinct and rapidly advancing class of models — OpenAI's o1/o3 series, DeepSeek-R1 — employs a different paradigm: rather than generating a response directly, they first produce an extended internal <strong>chain of thought</strong>, reasoning through the problem before committing to an answer.</p>
+      <p>These models are trained via <strong>reinforcement learning (RL)</strong> on tasks with verifiable correct answers — mathematics, formal logic, competitive programming — where correct answers can be automatically checked, making the training signal precise and scalable.</p>
+      <div class="pull-quote">
+        <p>"In principle, this paradigm is capable of doing something really cool, new, and exciting — something even that no human has thought of before."</p>
+        <cite>— Andrej Karpathy</cite>
+      </div>
+      <h3>The AlphaGo Analogy</h3>
+      <p>Karpathy draws an analogy to AlphaGo's "Move 37" — a move so unexpected that human commentators initially assumed it was an error, before recognizing it as a profound strategic insight. The same dynamic may apply to reasoning models: RL training can discover reasoning strategies that no human data labeler would have written, because the model is optimizing against a ground-truth signal rather than imitating human behavior.</p>
+      <div class="callout warning">
+        <span class="callout-label">Current Limitations</span>
+        Thinking models currently excel in <em>verifiable domains</em> — math, code, logic. Whether learned reasoning strategies transfer to open-ended, unverifiable domains remains an open research question.
+      </div>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note blue">
+        <span class="note-label">Try It</span>
+        DeepSeek-R1 (open weights, MIT license) is available at <em>together.ai</em>. OpenAI's o3-mini via ChatGPT. Both expose reasoning traces illustrating chain-of-thought in action.
+      </div>
+      <div class="margin-note">
+        <span class="note-label">Open Weights</span>
+        DeepSeek-R1's MIT license means anyone can download, modify, and deploy it — unprecedented for a model of its capability level.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 11 -->
+<section class="chapter" id="ch11">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 11</div>
+    <h2>RLHF and Model Alignment</h2>
+    <p class="ch-sub">Training models to be helpful, harmless, and honest</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>The third training stage — <strong>Reinforcement Learning from Human Feedback (RLHF)</strong> — differs from SFT crucially: rather than showing the model what to write, it shows the model what humans <em>prefer</em>.</p>
+      <h3>How RLHF Works</h3>
+      <ol class="numbered-list">
+        <li><strong>Generate</strong> — The current model produces multiple candidate responses to a prompt.</li>
+        <li><strong>Compare</strong> — Human evaluators rank these responses by quality.</li>
+        <li><strong>Train a Reward Model</strong> — A separate network learns to predict human preference scores at scale.</li>
+        <li><strong>Optimize</strong> — The main model is updated via RL to produce outputs receiving high reward scores.</li>
+      </ol>
+      <div class="callout key-idea">
+        <span class="callout-label">Why RLHF Is Powerful</span>
+        RLHF doesn't require humans to write ideal responses — only to compare existing ones. This is far easier and scales: the reward model can evaluate millions of responses that no human will ever read, allowing RL training to run far longer than direct labeling would permit.
+      </div>
+      <h3>Limitations and Open Questions</h3>
+      <p>Models can learn to "game" the reward model — producing responses that score highly without being genuinely helpful. The reward model is an approximation of human preferences, not a ground truth, and can be miscalibrated in subtle ways. These are active areas of alignment research.</p>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note">
+        <span class="note-label">RLHF vs. RL</span>
+        Standard RLHF (as in GPT-4) is "closer to fine-tuning than true RL." The large-scale RL in thinking models (§10) is a more aggressive and transformative application of reinforcement learning principles.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- § 12 -->
+<section class="chapter" id="ch12">
+  <div class="chapter-header">
+    <div class="ch-label">Chapter 12</div>
+    <h2>Practical Guidance: Using LLMs Effectively</h2>
+    <p class="ch-sub">A synthesis of the mental models developed throughout this text</p>
+  </div>
+  <div class="chapter-body">
+    <div class="prose">
+      <p>Having built up an understanding of how LLMs work from first principles, we can now derive principled practical guidance for working with them.</p>
+      <h3>The Right Mental Model</h3>
+      <p>An LLM assistant is a <strong>neural network simulation of a human expert data labeler</strong>, constrained to a fixed amount of computation per token. This single framing explains most of its behavior — its fluency, its breadth, its hallucinations, and its surprising gaps.</p>
+      <h3>Core Principles</h3>
+      <ol class="numbered-list">
+        <li><strong>Use them constantly.</strong> Productivity gains from heavy LLM use are large and compounding. Calibrate intuitions through direct, frequent experience.</li>
+        <li><strong>Own the output.</strong> Treat all LLM-generated work as a draft you review and take responsibility for.</li>
+        <li><strong>Verify important claims.</strong> For any factual assertion that matters — citations, statistics, recent events — verify independently.</li>
+        <li><strong>Route to tools when precision matters.</strong> Arithmetic, string manipulation, current events: use tools. The model's native capabilities are statistical and approximate; tools are exact.</li>
+        <li><strong>Give it room to think.</strong> Ask the model to reason step by step before answering complex problems. This significantly improves reliability.</li>
+        <li><strong>Provide relevant context.</strong> Paste in relevant source material rather than relying on trained recall. Working memory is more reliable than long-term memory.</li>
+      </ol>
+      <h3>Staying Current</h3>
+      <table class="compare-table">
+        <thead><tr><th>Resource</th><th>What It Provides</th></tr></thead>
+        <tbody>
+          <tr><td><strong>LMSYS Chatbot Arena</strong></td><td>Human-preference leaderboard of all major models, updated continuously.</td></tr>
+          <tr><td><strong>AI News Newsletter</strong> (swyx)</td><td>Comprehensive near-daily digest of AI developments.</td></tr>
+          <tr><td><strong>X / Twitter</strong></td><td>Real-time commentary from researchers; fastest source of breaking developments.</td></tr>
+        </tbody>
+      </table>
+      <div class="summary-box">
+        <span class="sum-label">Key Takeaways</span>
+        <ul>
+          <li>LLMs are built in three stages: pre-training (knowledge), SFT (helpfulness), RLHF (alignment).</li>
+          <li>A model response is a neural simulation of a human expert — not a database lookup.</li>
+          <li>Hallucinations are an inherent consequence of probabilistic text prediction.</li>
+          <li>Context windows are more reliable than trained knowledge; provide source material when accuracy matters.</li>
+          <li>Use tools (search, code) for tasks requiring precision or currency.</li>
+          <li>Thinking models (o1, DeepSeek-R1) use RL to discover reasoning strategies beyond human imitation.</li>
+          <li>Use LLMs frequently, critically, and with verification — as tools in a toolbox, not oracles.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="margin-col">
+      <div class="margin-note green">
+        <span class="note-label">Finding Models</span>
+        Proprietary: chatgpt.com, claude.ai, gemini.google.com. Open-weight: together.ai, hyperbolic.xyz. Local: LM Studio.
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="doc-footer">
+  <div class="footer-inner">
+    <p>Adapted from Andrej Karpathy's lecture <em>"Deep Dive into LLMs like ChatGPT."</em> All intellectual content originates with Karpathy; this is a reading-optimised presentation of that material. The original lecture is available on YouTube.</p>
+  </div>
+</div>
+
+</div>
+
+<script>
+window.addEventListener('scroll', () => {
+  const total = document.body.scrollHeight - window.innerHeight;
+  const pct = total > 0 ? (window.scrollY / total) * 100 : 0;
+  document.getElementById('reading-progress-bar').style.width = pct + '%';
+});
+
+const sections = document.querySelectorAll('section.chapter, #cover');
+const tocLinks = document.querySelectorAll('.toc-link');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.id;
+      tocLinks.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + id));
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
